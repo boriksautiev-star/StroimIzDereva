@@ -1,0 +1,44 @@
+{
+  "dimensions": {
+    "length": 8,
+    "width": 6,
+    "wallHeight": 2.7,
+    "ridgeHeight": 5
+  },
+  "roof": {
+    "rafterLength": "3.78",
+    "area": "45.4",
+    "rise": "2.30"
+  },
+  "load": {
+    "totalTons": "80.8"
+  },
+  "foundation": {
+    "type": "сваи",
+    "count": 29
+  },
+  "materials": [
+    {
+      "item": "Доска 50×150 (стойки)",
+      "count": 48,
+      "vol": "1.158",
+      "unit": "м³"
+    },
+    {
+      "item": "Доска 50×200 (стропила)",
+      "count": 28,
+      "vol": "1.058",
+      "unit": "м³"
+    },
+    {
+      "item": "Обрешётка 25×100",
+      "vol": "0.127",
+      "unit": "м³"
+    },
+    {
+      "item": "ОСП 9 мм",
+      "vol": "0.748",
+      "unit": "м³"
+    }
+  ]
+}

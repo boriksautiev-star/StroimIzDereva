@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Дом 10×8",
+    "length": 10,
+    "width": 8,
+    "wallHeight": 3,
+    "ridgeHeight": 5.5,
+    "windows": 4,
+    "doors": 2,
+    "partitionsLength": 6
+  },
+  {
+    "name": "Баня 6×4",
+    "length": 6,
+    "width": 4,
+    "wallHeight": 2.5,
+    "ridgeHeight": 4.2,
+    "windows": 2,
+    "doors": 1,
+    "partitionsLength": 3
+  },
+  {
+    "name": "Гараж 6×6",
+    "length": 6,
+    "width": 6,
+    "wallHeight": 3,
+    "ridgeHeight": 4.5,
+    "windows": 1,
+    "doors": 1,
+    "partitionsLength": 0
+  },
+  {
+    "name": "Дачный домик 5×5",
+    "length": 5,
+    "width": 5,
+    "wallHeight": 2.7,
+    "ridgeHeight": 4.5,
+    "windows": 2,
+    "doors": 1,
+    "partitionsLength": 2
+  }
+]

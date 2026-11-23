@@ -1,0 +1,21 @@
+{
+    "name": "stroimizdereva",
+    "version": "1.0.0",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "start": "electron ."
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "dependencies": {
+        "exceljs": "^4.4.0",
+        "three": "^0.152.2"
+    },
+    "devDependencies": {
+        "electron": "^45.4.1"
+    },
+    "main": "main.js",
+    "description": "Расчёт материалов каркасного дома"
+}

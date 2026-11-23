@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>StroimIzDereva — конструктор</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: #f5f6f8; color: #222; height: 100vh; overflow: hidden; }
+  #app { display: flex; height: 100vh; }
+  #left { width: 430px; padding: 16px; overflow-y: auto; }
+  #right { flex: 1; display: flex; flex-direction: column; padding: 12px 12px 12px 0; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 14px; margin: 0 0 8px; color: #333; }
+  .card { background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; }
+  label { font-size: 11px; margin-bottom: 3px; color: #555; }
+  input, select { padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; width: 90px; font-size: 13px; background: #fff; }
+  input.wide, select.wide { width: 200px; }
+  button { padding: 8px 14px; border: none; border-radius: 6px; background: #2f6fed; color: #fff; font-size: 13px; cursor: pointer; }
+  button:hover { background: #1f56c4; }
+  button.secondary { background: #27a468; }
+  button.ghost { background: #888; }
+  button.active { background: #e67e22; }
+  #status { font-size: 13px; margin-bottom: 8px; display: none; }
+  .err { color: #c22; } .ok { color: #27a468; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border: 1px solid #e2e2e2; padding: 6px 8px; font-size: 12px; text-align: left; }
+  th { background: #eef2fb; }
+  tr.total td { font-weight: bold; background: #f7f9ff; }
+  .info { margin: 0 0 8px; font-size: 12px; color: #444; }
+  #scene { flex: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); background: #eef2f7; min-height: 300px; }
+  #scene canvas { display: block; }
+  #toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  #toolbar span { font-size: 12px; color: #666; }
+  #opening-editor .row { align-items: center; }
+  #opening-editor input { width: 70px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="left">
+    <h1>Конструктор каркасного дома</h1>
+
+    <div class="card">
+      <h2>Типовые проекты</h2>
+      <div class="row">
+        <div class="field"><label>Шаблон</label><select id="templateSelect" class="wide"><option value="">— выберите —</option></select></div>
+        <button type="button" id="apply-template">Применить</button>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <div class="field"><label>Имя нового шаблона</label><input id="templateName" class="wide" type="text" placeholder="Мой проект 12×9" /></div>
+        <button type="button" id="save-template-btn" class="ghost">Сохранить как шаблон</button>
+      </div>
+    </div>
+
+    <form id="calc-form" class="card">
+      <h2>Параметры дома</h2>
+      <div class="row">
+        <div class="field"><label>Длина, м</label><input id="length" type="text" /></div>
+        <div class="field"><label>Ширина, м</label><input id="width" type="text" /></div>
+        <div class="field"><label>Стена, м</label><input id="wallHeight" type="text" /></div>
+        <div class="field"><label>Конёк, м</label><input id="ridgeHeight" type="text" /></div>
+        <div class="field"><label>Перегородки, м</label><input id="partitionsLength" type="text" value="0" /></div>
+        <div class="field"><label>Название проекта</label><input id="projectName" class="wide" type="text" placeholder="Дом на Ленина, 5" /></div>
+      </div>
+    </form>
+
+    <div id="status"></div>
+
+    <div id="result">
+      <div class="info" id="info"></div>
+      <table id="materials-table"></table>
+      <div style="margin-top:10px;">
+        <button class="secondary" id="save-btn">Сохранить смету в Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="right">
+    <div id="toolbar" class="card">
+      <button id="tool-window">+ Окно</button>
+      <button id="tool-door">+ Дверь</button>
+      <button id="tool-cancel" class="ghost">Сброс</button>
+      <span id="tool-hint">ЛКМ — вращать, колесо — зум. Выберите инструмент и кликните по стене.</span>
+    </div>
+    <div id="opening-editor" class="card" style="display:none">
+      <h2>Выделен проём: <span id="sel-type"></span></h2>
+      <div class="row">
+        <div class="field"><label>Ширина, м</label><input id="sel-width" type="text" /></div>
+        <div class="field"><label>Высота, м</label><input id="sel-height" type="text" /></div>
+        <button id="sel-apply">Применить</button>
+        <button id="sel-delete" class="ghost">Удалить</button>
+      </div>
+    </div>
+    <div id="scene"></div>
+  </div>
+</div>
+<script src="lib/three.min.js"></script>
+<script src="renderer.js"></script>
+</body>
+</html>
