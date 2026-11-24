@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Строим из дерева — v5.0</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: Segoe UI, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  #info {
+    padding: 10px 16px; background: #1b212b; color: #cfd8e3;
+    font-size: 14px; border-bottom: 1px solid #2a3542;
+  }
+  #scene { flex: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="info">Загрузка...</div>
+  <div id="scene"></div>
+</div>
+<script src="lib/three.min.js"></script>
+<script>
+  if (typeof THREE === 'undefined') {
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+  }
+</script>
+<script src="core/model.js"></script>
+<script src="core/norms.js"></script>
+<script src="core/calc.js"></script>
+<script src="ui/viewer3d.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
