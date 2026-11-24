@@ -57,12 +57,9 @@ class Viewer3D {
       lx = e.clientX; ly = e.clientY;
 
       if (dragBtn === 0) {
-        // ЛКМ — вращение вокруг цели
         this.theta += dx * 0.005;
-        this.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.05,
-          this.phi - dy * 0.005));
+        this.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, this.phi - dy * 0.005));
       } else {
-        // ПКМ или СКМ — панорама в плоскости экрана
         const speed = this.radius * 0.0015;
         const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0);
         const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1);
@@ -128,7 +125,8 @@ class Viewer3D {
     spacing = spacing || 600;
     const C = {
       end: 0xd9534f, common: 0xd8a15a, king: 0x5a9bd8,
-      header: 0xe08840, plate: 0x8a5a2a, glass: 0x88ccee
+      jack: 0x9fd0ee, cripple: 0x93c47d,
+      header: 0xe08840, plate: 0x8a5a2a, sill: 0xb08d55, glass: 0x88ccee
     };
     let studsTotal = 0;
 
@@ -150,20 +148,28 @@ class Viewer3D {
         this._place(this._box(L, 38, t, C.plate), mx, my, ang, z0 + H - 57);
         this._place(this._box(L, 38, t, C.plate), mx, my, ang, z0 + H - 19);
 
-        // Стойки
+        // Стойки: каждая со своими y0..y1
         for (const s of layout.studs) {
           const cx = w.x1 + dirx * (s.offset + 19);
           const cz = w.y1 + diry * (s.offset + 19);
           this._place(this._box(38, s.length, t, C[s.role] || C.common),
-            cx, cz, ang, z0 + 38 + s.length / 2);
+            cx, cz, ang, z0 + s.y0 + s.length / 2);
         }
 
-        // Перемычки над проёмами
+        // Перемычки над проёмами — опираются на каёмки
         for (const h of layout.headers) {
           const cx = w.x1 + dirx * (h.offset + h.width / 2);
           const cz = w.y1 + diry * (h.offset + h.width / 2);
-          this._place(this._box(h.width, 38, h.depth, C.header),
-            cx, cz, ang, z0 + h.bottomZ + 19);
+          this._place(this._box(h.width, h.depth, t, C.header),
+            cx, cz, ang, z0 + h.bottomZ + h.depth / 2);
+        }
+
+        // Подоконные доски под окнами
+        for (const sl of (layout.sills || [])) {
+          const cx = w.x1 + dirx * (sl.offset + sl.width / 2);
+          const cz = w.y1 + diry * (sl.offset + sl.width / 2);
+          this._place(this._box(sl.width, sl.z1 - sl.z0, t, C.sill),
+            cx, cz, ang, z0 + (sl.z0 + sl.z1) / 2);
         }
 
         // Стёкла проёмов — полупрозрачные
