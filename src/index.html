@@ -2,20 +2,33 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Строим из дерева — v5.0</title>
+<title>Строим из дерева — v5.3</title>
 <style>
   html, body { margin: 0; height: 100%; font-family: Segoe UI, sans-serif; }
   #app { display: flex; flex-direction: column; height: 100%; }
-  #info {
-    padding: 10px 16px; background: #1b212b; color: #cfd8e3;
-    font-size: 14px; border-bottom: 1px solid #2a3542;
+  #bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px; background: #1b212b; border-bottom: 1px solid #2a3542;
   }
-  #scene { flex: 1; }
+  #info { color: #cfd8e3; font-size: 14px; }
+  #bar button, #bar select {
+    padding: 6px 14px; font-size: 13px; color: #cfd8e3;
+    background: #2a3542; border: 1px solid #3a4a5a; border-radius: 4px;
+    cursor: pointer;
+  }
+  #bar button.active { background: #2f6f4f; border-color: #4caf7d; color: #fff; }
+  #bar button.danger:hover { background: #5a2a2a; border-color: #c05050; }
+  #scene { flex: 1; position: relative; }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="info">Загрузка...</div>
+  <div id="bar">
+    <button id="drawBtn">Нарисовать стену</button>
+    <button id="deleteBtn" class="danger">Удалить</button>
+    <select id="sectionSel" title="Сечение доски каркаса"></select>
+    <div id="info">Загрузка...</div>
+  </div>
   <div id="scene"></div>
 </div>
 <script src="lib/three.min.js"></script>

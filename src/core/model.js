@@ -1,12 +1,13 @@
+'use strict';
+
 // ============================================================
 // core/model.js — модель дома. Только данные и логика,
 // никакой графики. Схема сохранения: SCHEMA_VERSION = 1.
+// section: w — ширина лицевой стороны доски (шаг стоек),
+//          h — глубина доски = толщина стены.
 // ============================================================
-'use strict';
 
 const SCHEMA_VERSION = 1;
-
-// --- Единицы: внутри модели всё в миллиметрах ---
 
 class IdGen {
   constructor() { this._next = 1; }
@@ -23,30 +24,31 @@ class Opening {
     this.offset = offset;    // от начала стены, мм
     this.width = width;      // мм
     this.height = height;    // мм
-    this.sill = sill;        // подоконник (высота от низа стены), мм
+    this.sill = sill;        // подоконник, мм от низа стены
     this.materialId = null;  // заполнение — ссылка на материал
   }
 }
 
 // --- Стена ---
 class Wall {
-  constructor(x1, y1, x2, y2, height = 2800, thickness = 150) {
+  constructor(x1, y1, x2, y2, height = 2800, section = { w: 38, h: 140 }) {
     this.id = null;
     this.x1 = x1; this.y1 = y1;   // мм, начало
     this.x2 = x2; this.y2 = y2;   // мм, конец
     this.height = height;          // мм
-    this.thickness = thickness;    // мм
-    this.openings = [];            // Opening[]
-    this.materialId = null;        // доска каркаса
-    this.skinOutId = null;         // наружная обшивка
-    this.skinInId = null;          // внутренняя
-    this.insulationId = null;      // утеплитель
+    this.section = { w: section.w, h: section.h }; // доска каркаса
+    this.thickness = this.section.h; // толщина стены = глубина доски
+    this.openings = [];
+    this.materialId = null;
+    this.skinOutId = null;
+    this.skinInId = null;
+    this.insulationId = null;
   }
   length() {
     return Math.hypot(this.x2 - this.x1, this.y2 - this.y1);
   }
   addOpening(opening) {
-    opening.id = null; // id присвоит модель
+    opening.id = null;
     this.openings.push(opening);
   }
 }
@@ -55,10 +57,10 @@ class Wall {
 class Story {
   constructor(name, elevation) {
     this.id = null;
-    this.name = name;        // 'Первый этаж', 'Мансарда'
-    this.elevation = elevation; // высота низа стены, мм
-    this.walls = [];         // Wall[]
-    this.floorId = null;     // конструкция пола
+    this.name = name;
+    this.elevation = elevation;
+    this.walls = [];
+    this.floorId = null;
   }
 }
 
@@ -69,8 +71,8 @@ class Project {
     this.name = name;
     this.idGen = new IdGen();
     this.stories = [];
-    this.roof = null;        // появится в следующих шагах
-    this.materials = [];     // каталог материалов проекта
+    this.roof = null;
+    this.materials = [];
   }
 
   assignIds() {
@@ -101,7 +103,6 @@ class Project {
     return null;
   }
 
-  // --- Сериализация: JSON в файл и обратно ---
   toJSON() {
     this.assignIds();
     return {
@@ -122,11 +123,15 @@ class Project {
     const p = new Project(json.name);
     p.idGen = IdGen.fromJSON(json.idGen || {});
     p.stories = json.stories || [];
+    for (const s of p.stories)
+      for (const w of (s.walls || [])) {
+        if (!w.section) { w.section = { w: 38, h: 140 }; }
+        w.thickness = w.section.h;
+      }
     p.roof = json.roof || null;
     p.materials = json.materials || [];
     return p;
   }
 }
 
-// Экспорт: в браузере и в тестах
 if (typeof module !== 'undefined') module.exports = { Project, Story, Wall, Opening, SCHEMA_VERSION };

@@ -2,32 +2,40 @@
 
 // ============================================================
 // core/calc.js — расчётный движок. Раскладка стоек по стене
-// с полным обрамлением проёмов: king, jack, header, cripple, sill.
-// Только логика, без графики.
+// с полным обрамлением проёмов.
+// section.w — ширина лицевой стороны доски (шаг стоек),
+// section.h — глубина доски = толщина стены.
+// Перемычка: две доски плашмя друг на друге —
+// высота = 2 × section.w, поперёк стены = section.h.
 // ============================================================
 
-const BOTTOM_PLATE = 38;
-const TOP_PLATES = 2 * 38;
-const HEADER_DEPTH = 2 * 38; // сдвоенная перемычка (v5.0; по пролёту — в v5.1)
+const TOP_PLATES_COUNT = 2;
+const HEADER_PLIES = 2; // доски перемычки — плашмя, друг на друге
 
-// Пересекается ли стойка [off, off+38] с проёмом [start, end]
-function studHitsOpening(off, start, end) {
-  return off < end && off + 38 > start;
+function studWidth(wall) {
+  return (wall.section && wall.section.w) || 38;  // лицевая ширина
+}
+function studDepth(wall) {
+  return (wall.section && wall.section.h) || 140; // глубина доски
 }
 
-// Раскладка стоек в стене.
+// Пересекается ли стойка [off, off+SW] с проёмом [start, end]
+function studHitsOpening(off, start, end, sw) {
+  sw = sw || 38;
+  return off < end && off + sw > start;
+}
+
 // Возвращает: { studs: [{ offset, role, y0, y1, length }],
 //                headers, sills, spacing }
-// y0/y1 — низ/верх стойки от низа стены, мм.
-// Узел проёма: king снаружи, jack внутри под концом перемычки,
-// перемычка опирается на каёмки, под окном — подоконная доска.
 function layoutStuds(wall, spacing) {
   spacing = spacing || 600;
+  const SW = studWidth(wall);
+  const SD = studDepth(wall);
   const L = wall.length();
   const wallH = wall.height;
   const studs = [];
-  const fullBottom = BOTTOM_PLATE;      // верх нижней обвязки
-  const fullTop = wallH - TOP_PLATES;   // низ верхней обвязки
+  const fullBottom = SW;                         // верх нижней обвязки (плашмя)
+  const fullTop = wallH - SW * TOP_PLATES_COUNT; // низ верхней обвязки
 
   const addStud = (offset, role, y0, y1) => {
     if (offset < 0 || offset > L) return;
@@ -48,7 +56,7 @@ function layoutStuds(wall, spacing) {
   for (let off = spacing; off < L; off += spacing) {
     let blocked = false;
     for (const op of sorted) {
-      if (studHitsOpening(off, op.offset, op.offset + op.width)) {
+      if (studHitsOpening(off, op.offset, op.offset + op.width, SW)) {
         blocked = true;
         break;
       }
@@ -62,29 +70,35 @@ function layoutStuds(wall, spacing) {
   for (const op of sorted) {
     const s = op.offset, e = op.offset + op.width;
     const headerBottom = op.sill + op.height;
-    const headerTop = headerBottom + HEADER_DEPTH;
+    const headerTop = headerBottom + HEADER_PLIES * SW; // плашмя: 2 доски стопкой
 
-    // king — снаружи проёма, jack — внутри, под концами перемычки
-    addStud(s - 38, 'king', fullBottom, fullTop);
+    // king снаружи проёма, jack внутри под концами перемычки
+    addStud(s - SW, 'king', fullBottom, fullTop);
     addStud(e, 'king', fullBottom, fullTop);
     addStud(s, 'jack', fullBottom, headerBottom);
-    addStud(e - 38, 'jack', fullBottom, headerBottom);
+    addStud(e - SW, 'jack', fullBottom, headerBottom);
 
-    headers.push({ offset: s, width: op.width, depth: HEADER_DEPTH, bottomZ: headerBottom });
+    headers.push({
+      offset: s,
+      width: op.width,
+      height: HEADER_PLIES * SW,  // плашмя: высота = две толщины лицевой стороны
+      thickness: SD,              // поперёк стены — вся глубина доски
+      bottomZ: headerBottom
+    });
 
-    // Укороченные над перемычкой — до верхней обвязки
-    for (let off = spacing; off + 38 <= e; off += spacing) {
+    // Укороченные над перемычкой
+    for (let off = spacing; off + SW <= e; off += spacing) {
       if (off <= s) continue;
       addStud(off, 'cripple', headerTop, fullTop);
     }
 
-    // Окно: подоконная доска под проёмом + стойки под ней
+    // Окно: подоконная доска (плашмя) + стойки под ней
     if (op.type === 'window') {
-      sills.push({ offset: s, width: op.width, z0: op.sill - 38, z1: op.sill });
-      if (op.sill - 38 > fullBottom) {
-        for (let off = spacing; off + 38 <= e; off += spacing) {
+      sills.push({ offset: s, width: op.width, z0: op.sill - SW, z1: op.sill });
+      if (op.sill - SW > fullBottom) {
+        for (let off = spacing; off + SW <= e; off += spacing) {
           if (off <= s) continue;
-          addStud(off, 'cripple', fullBottom, op.sill - 38);
+          addStud(off, 'cripple', fullBottom, op.sill - SW);
         }
       }
     }
@@ -94,20 +108,23 @@ function layoutStuds(wall, spacing) {
   return { studs, headers, sills, spacing };
 }
 
-// Сводка по материалу: сколько погонных метров доски нужно на стену
+// Сводка по материалу: погонные метры доски на стену
 function lumberSummary(wall, layout) {
   const meters = layout.studs.reduce((sum, s) => sum + s.length, 0) / 1000;
   const headersM = layout.headers.reduce((sum, h) =>
-    sum + (h.width / 1000) * 2, 0);
+    sum + (h.width / 1000) * HEADER_PLIES, 0);
   const sillsM = (layout.sills || []).reduce((sum, sl) => sum + sl.width / 1000, 0);
-  const platesM = wall.length() * 3 / 1000;
+  const platesM = wall.length() * (1 + TOP_PLATES_COUNT) / 1000;
   return {
     studsCount: layout.studs.length,
     studsMeters: Math.round(meters * 100) / 100,
     headersMeters: Math.round(headersM * 100) / 100,
     sillsMeters: Math.round(sillsM * 100) / 100,
-    platesMeters: Math.round(platesM * 100) / 100
+    platesMeters: Math.round(platesM * 100) / 100,
+    section: wall.section
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { layoutStuds, lumberSummary, studHitsOpening };
+if (typeof module !== 'undefined') {
+  module.exports = { layoutStuds, lumberSummary, studHitsOpening, studWidth, studDepth };
+}
