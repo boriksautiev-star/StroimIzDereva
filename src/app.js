@@ -1,12 +1,17 @@
 'use strict';
 
 // ============================================================
-// app.js — v5.9. То же поведение, что в 5.7/5.8: выбор всегда
-// активен, смена доски — сразу к выделенным, mouseup на окне.
+// app.js — v5.16. Стена ловится мышью по всей высоте лица
+// (выборка по пяти уровням от обвязки до обвязки).
+// PageUp/PageDown — растяжение стены по высоте (±100 мм,
+// минимум по нормам и не ниже, чем вмещают проёмы),
+// Shift+PageUp/PageDown — подъём/спуск отметки.
 // ============================================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  const VERSION = '5.9';
+  const VERSION = '5.16';
+  const MIN_WALL_HEIGHT = 1000; // мм — абсолютный минимум по нормам
+
   const project = new Project('Демо-дом v5');
   const story = project.addStory(new Story('Первый этаж', 0));
 
@@ -66,6 +71,19 @@ window.addEventListener('DOMContentLoaded', () => {
     return m ? { w: +m[1], h: +m[2] } : { w: 38, h: 140 };
   }
 
+  // Минимальная высота стены: абсолютный минимум либо
+  // самый высокий проём + перемычка (2 доски плашмя) +
+  // верхняя обвязка (2 доски)
+  function minWallHeight(w) {
+    const SW = (w.section && w.section.w) || 38;
+    let mh = MIN_WALL_HEIGHT;
+    for (const op of w.openings) {
+      const need = op.sill + op.height + SW * 2 + SW * 2;
+      if (need > mh) mh = need;
+    }
+    return mh;
+  }
+
   const SPACING = 600;
   const selected = new Set();
   let stats = viewer.buildFromModel(project, SPACING, selected);
@@ -74,6 +92,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let first = null;
   let downX = 0, downY = 0;
   let dragging = null;
+  let wallDrag = null;
   let orbiting = false;
   let lastMX = 0, lastMY = 0;
   let selStart = null, selCur = null;
@@ -101,12 +120,13 @@ window.addEventListener('DOMContentLoaded', () => {
   function updateInfo(extra) {
     const sec = currentSection();
     let s = 'v' + VERSION + ' | Стен: ' + story.walls.length +
-      ', стоек: ' + stats.studsTotal + ', доска: ' + sec.w + '×' + sec.h;
+      ', стоек: ' + stats.studsTotal + ', укосин: ' + stats.bracesTotal +
+      ', доска: ' + sec.w + '×' + sec.h;
     if (selected.size) s += ' | выделено: ' + selected.size +
       ' (' + sectionsOfSelected() + ')';
     if (extra) s += ' | ' + extra;
     else if (drawMode) s += ' | РИСОВАНИЕ: ЛКМ — угол, ещё ЛКМ — стена (15°, Alt — свободный), ПКМ/Esc — отмена';
-    else s += ' | клик — стена, рамка ЛКМ — выделение, Ctrl+ЛКМ — орбита, ПКМ — панорама, Delete — удалить';
+    else s += ' | тащить — перенос, Alt+тащить — поворот, PageUp/Down — высота, Shift+PageUp/Down — отметка, рамка — выделение, Ctrl+ЛКМ — орбита';
     info.textContent = s;
   }
 
@@ -149,24 +169,79 @@ window.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      if (wallDrag) {
+        const w = wallDrag.wall, o = wallDrag.orig;
+        w.x1 = o.x1; w.y1 = o.y1; w.x2 = o.x2; w.y2 = o.y2;
+        wallDrag = null;
+        viewer.inputLocked = false;
+        rebuild('перемещение отменено');
+        return;
+      }
       if (drawMode) { first = null; viewer.clearPreview(); viewer.clearFirstPoint(); }
       else if (selected.size) { selected.clear(); rebuild(); }
+      return;
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && !drawMode) {
       btnDelete.click();
+      return;
+    }
+    if ((e.key === 'PageUp' || e.key === 'PageDown') && !drawMode && selected.size) {
+      const d = e.key === 'PageUp' ? 100 : -100;
+
+      if (e.shiftKey) {
+        // Подъём/спуск отметки
+        for (const id of selected) {
+          const w = project.findWall(id);
+          if (w) w.elevation = Math.max(0, (w.elevation || 0) + d);
+        }
+        rebuild((e.key === 'PageUp' ? 'поднято' : 'опущено') + ' на 100 мм');
+        return;
+      }
+
+      // Растяжение по высоте с нормативной защитой
+      let blocked = null, minH = 0;
+      for (const id of selected) {
+        const w = project.findWall(id);
+        if (!w) continue;
+        const nh = w.height + d;
+        const mh = minWallHeight(w);
+        if (nh < mh) { blocked = w; minH = mh; continue; }
+        w.height = nh;
+      }
+      if (blocked) {
+        rebuild('не ниже ' + minH + ' мм: мешает проём в ' + blocked.id);
+      } else {
+        const hs = [...selected].map(id => {
+          const w = project.findWall(id);
+          return w ? w.height : 0;
+        }).join('/');
+        rebuild('высота: ' + hs + ' мм');
+      }
     }
   });
 
+  // Выбор стены по всей высоте лица: пять уровней от низа до верха
   function pickWallScreen(mx, my) {
     let best = null, bestD = 15;
+    const LEVELS = [0, 0.25, 0.5, 0.75, 1];
     for (const w of story.walls) {
+      const z0 = (story.elevation || 0) + (w.elevation || 0);
+      const SW = (w.section && w.section.w) || 38;
+      const ys = [SW / 2,
+        z0 + w.height * 0.25,
+        z0 + w.height * 0.5,
+        z0 + w.height * 0.75,
+        z0 + w.height - SW / 2];
       const N = 40;
       for (let i = 0; i <= N; i++) {
         const t = i / N;
-        const p = viewer.worldToScreen(
-          w.x1 + (w.x2 - w.x1) * t, w.y1 + (w.y2 - w.y1) * t);
-        const d = Math.hypot(p.x - mx, p.y - my);
-        if (d < bestD) { bestD = d; best = w; }
+        const x = w.x1 + (w.x2 - w.x1) * t;
+        const z = w.y1 + (w.y2 - w.y1) * t;
+        for (const y of ys) {
+          const p = viewer.worldToScreen(x, z, y);
+          const d = Math.hypot(p.x - mx, p.y - my);
+          if (d < bestD) { bestD = d; best = w; }
+        }
       }
     }
     return best;
@@ -227,6 +302,22 @@ window.addEventListener('DOMContentLoaded', () => {
       const h = viewer.pickHandle(pt);
       if (h) { dragging = h; viewer.inputLocked = true; return; }
     }
+
+    const hitWall = pickWallScreen(e.clientX, e.clientY);
+    if (hitWall && pt) {
+      wallDrag = {
+        wall: hitWall,
+        orig: { x1: hitWall.x1, y1: hitWall.y1, x2: hitWall.x2, y2: hitWall.y2 },
+        startPt: pt,
+        center: { x: (hitWall.x1 + hitWall.x2) / 2, z: (hitWall.y1 + hitWall.y2) / 2 },
+        startAng: Math.atan2(hitWall.y2 - hitWall.y1, hitWall.x2 - hitWall.x1),
+        moved: false,
+        rotate: e.altKey
+      };
+      viewer.inputLocked = true;
+      return;
+    }
+
     selStart = { x: e.clientX, y: e.clientY };
     selCur = null;
   });
@@ -237,6 +328,31 @@ window.addEventListener('DOMContentLoaded', () => {
     const onCanvas = e.target === el;
 
     if (orbiting) { orbiting = false; return; }
+
+    if (wallDrag) {
+      const wd = wallDrag;
+      wallDrag = null;
+      if (wd.moved) {
+        if (!selected.has(wd.wall.id)) {
+          selected.clear();
+          selected.add(wd.wall.id);
+        }
+        project.assignIds();
+        rebuild(wd.wall.id + (wd.rotate ? ' развёрнута' : ' перемещена'));
+      } else {
+        if (onCanvas) {
+          if (e.shiftKey) {
+            if (selected.has(wd.wall.id)) selected.delete(wd.wall.id);
+            else selected.add(wd.wall.id);
+          } else {
+            selected.clear();
+            selected.add(wd.wall.id);
+          }
+        }
+        rebuild();
+      }
+      return;
+    }
 
     if (dragging) {
       dragging = null;
@@ -299,6 +415,41 @@ window.addEventListener('DOMContentLoaded', () => {
     if (orbiting) {
       viewer.orbitBy(e.clientX - lastMX, e.clientY - lastMY);
       lastMX = e.clientX; lastMY = e.clientY;
+      return;
+    }
+
+    if (!drawMode && wallDrag) {
+      if (!wallDrag.moved &&
+          Math.hypot(e.clientX - downX, e.clientY - downY) <= 5) return;
+      const pt = viewer.screenToGround(e.clientX, e.clientY);
+      if (!pt) return;
+      wallDrag.moved = true;
+      const w = wallDrag.wall, o = wallDrag.orig;
+
+      if (wallDrag.rotate) {
+        let da = Math.atan2(pt.z - wallDrag.center.z,
+                            pt.x - wallDrag.center.x) - wallDrag.startAng;
+        if (!e.shiftKey) {
+          const step = Math.PI / 12;
+          da = Math.round(da / step) * step;
+        }
+        const c = Math.cos(da), s = Math.sin(da);
+        const cx = wallDrag.center.x, cz = wallDrag.center.z;
+        const rot = (x, z) => {
+          const dx0 = x - cx, dz0 = z - cz;
+          return { x: cx + dx0 * c - dz0 * s, z: cz + dx0 * s + dz0 * c };
+        };
+        const p1 = rot(o.x1, o.y1), p2 = rot(o.x2, o.y2);
+        w.x1 = Math.round(p1.x); w.y1 = Math.round(p1.z);
+        w.x2 = Math.round(p2.x); w.y2 = Math.round(p2.z);
+      } else {
+        const dx = pt.x - wallDrag.startPt.x;
+        const dz = pt.z - wallDrag.startPt.z;
+        w.x1 = Math.round(o.x1 + dx); w.y1 = Math.round(o.y1 + dz);
+        w.x2 = Math.round(o.x2 + dx); w.y2 = Math.round(o.y2 + dz);
+      }
+      viewer.buildFromModel(project, SPACING, selected);
+      viewer.showHandles(story.walls.filter(x => selected.has(x.id)));
       return;
     }
 

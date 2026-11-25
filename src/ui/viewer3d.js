@@ -1,11 +1,10 @@
 'use strict';
 
 // ============================================================
-// ui/viewer3d.js — v5.9. Перемычка на ребре (высота = глубина
-// доски, поперёк стены — 2 ширины). Каждому брусу добавлены
-// рёбра-грани (EdgesGeometry), чтобы доски не сливались.
-// Диагностическая окраска обвязки убрана — вся древесина
-// натуральных цветов.
+// ui/viewer3d.js — v5.15. Стены размещаются на своей отметке:
+// z = story.elevation + wall.elevation. Маркеры выделения
+// поднимаются вместе со стеной. Зум до 700 мм. Укосины
+// плашмя с запиленными торцами (из v5.14).
 // ============================================================
 
 class Viewer3D {
@@ -65,8 +64,8 @@ class Viewer3D {
     };
   }
 
-  worldToScreen(x, z) {
-    const v = new THREE.Vector3(x, 0, z).project(this.camera);
+  worldToScreen(x, z, y) {
+    const v = new THREE.Vector3(x, y || 0, z).project(this.camera);
     const rect = this.renderer.domElement.getBoundingClientRect();
     return {
       x: (v.x + 1) / 2 * rect.width + rect.left,
@@ -84,6 +83,7 @@ class Viewer3D {
     this.clearHandles();
     this.handleGroup = new THREE.Group();
     for (const w of walls) {
+      const z = w.elevation || 0;
       const pts = [
         { x: w.x1, z: w.y1, end: 1 },
         { x: w.x2, z: w.y2, end: 2 }
@@ -92,7 +92,7 @@ class Viewer3D {
         const m = new THREE.Mesh(
           new THREE.BoxGeometry(250, 250, 250),
           new THREE.MeshBasicMaterial({ color: 0x00e5a0 }));
-        m.position.set(p.x, 125, p.z);
+        m.position.set(p.x, 125 + z, p.z);
         m.userData = { wall: w, end: p.end };
         this.handleGroup.add(m);
       }
@@ -148,17 +148,20 @@ class Viewer3D {
   }
 
   _colors(selected) {
+    const brace = 0xe6d9a8;
     if (selected) {
       return {
         end: 0xff5040, common: 0xffc040, king: 0x6fc2ff,
         jack: 0xaee0ff, cripple: 0xa8e07d,
-        header: 0xffa050, plate: 0xd08a3a, sill: 0xd0a060, glass: 0x99ddff
+        header: 0xffa050, plate: 0xd08a3a, sill: 0xd0a060,
+        glass: 0x99ddff, brace: 0xfff2b0
       };
     }
     return {
       end: 0xd9534f, common: 0xd8a15a, king: 0x5a9bd8,
       jack: 0x9fd0ee, cripple: 0x93c47d,
-      header: 0xe08840, plate: 0x8a5a2a, sill: 0xb08d55, glass: 0x88ccee
+      header: 0xe08840, plate: 0x8a5a2a, sill: 0xb08d55,
+      glass: 0x88ccee, brace
     };
   }
 
@@ -190,7 +193,7 @@ class Viewer3D {
     el.addEventListener('wheel', e => {
       e.preventDefault();
       this.radius *= e.deltaY > 0 ? 1.1 : 0.9;
-      this.radius = Math.max(2000, Math.min(100000, this.radius));
+      this.radius = Math.max(700, Math.min(100000, this.radius));
       this._updateCamera();
     }, { passive: false });
   }
@@ -222,8 +225,6 @@ class Viewer3D {
     this.preview = null;
   }
 
-  // Брус = залитая доска + тёмные рёбра-грани.
-  // Возвращает группу: position/rotation задаются через _place.
   _box(parent, dx, dy, dz, color, opacity) {
     const g = new THREE.Group();
     const mesh = new THREE.Mesh(
@@ -231,7 +232,6 @@ class Viewer3D {
       new THREE.MeshLambertMaterial({
         color, transparent: !!opacity, opacity: opacity || 1 }));
     g.add(mesh);
-    // Рёбра — тонкий контур чуть темнее тела доски
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(mesh.geometry),
       new THREE.LineBasicMaterial({
@@ -248,23 +248,51 @@ class Viewer3D {
     return mesh;
   }
 
+  _braceBeam(parent, br, brT, zOffset, color) {
+    const a = Math.atan2(br.y1 - br.y0, br.x1 - br.x0);
+    const s = Math.sin(a), c = Math.cos(a);
+    const hw = br.section.h / 2;
+    const xEdgeA = y => br.x0 - s * hw + c * (y - (br.y0 + c * hw)) / s;
+    const xEdgeB = y => br.x0 + s * hw + c * (y - (br.y0 - c * hw)) / s;
+
+    const shape = new THREE.Shape();
+    shape.moveTo(xEdgeA(br.y0) - br.x0, br.y0);
+    shape.lineTo(xEdgeB(br.y0) - br.x0, br.y0);
+    shape.lineTo(xEdgeB(br.y1) - br.x0, br.y1);
+    shape.lineTo(xEdgeA(br.y1) - br.x0, br.y1);
+    shape.closePath();
+
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: brT, bevelEnabled: false });
+    geo.translate(0, 0, -brT / 2);
+
+    const mesh = new THREE.Mesh(geo,
+      new THREE.MeshLambertMaterial({ color }));
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x201810 }));
+
+    const grp = new THREE.Group();
+    grp.add(mesh); grp.add(edges);
+    grp.position.z = zOffset;
+    return grp;
+  }
+
   _placeWall(w, layout, z0, C, parent) {
-    const SW = (w.section && w.section.w) || 38;  // лицевая ширина
-    const SD = (w.section && w.section.h) || 140; // глубина = толщина стены
+    const SW = (w.section && w.section.w) || 38;
+    const SD = (w.section && w.section.h) || 140;
     const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
     const L = w.length();
-    if (L < 1) return 0;
+    if (L < 1) return { studs: 0, braces: 0 };
     const ang = -Math.atan2(dy, dx);
     const dirx = dx / L, diry = dy / L;
     const H = w.height;
     const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
 
-    // Обвязки плашмя: высота SW, глубина SD — натуральный цвет
     this._place(this._box(parent, L, SW, SD, C.plate), mx, my, ang, z0 + SW / 2);
     this._place(this._box(parent, L, SW, SD, C.plate), mx, my, ang, z0 + H - SW * 1.5);
     this._place(this._box(parent, L, SW, SD, C.plate), mx, my, ang, z0 + H - SW / 2);
 
-    // Стойки — пластинки: ширина SW, глубина SD
     for (const s of layout.studs) {
       const cx = w.x1 + dirx * (s.offset + SW / 2);
       const cz = w.y1 + diry * (s.offset + SW / 2);
@@ -272,7 +300,6 @@ class Viewer3D {
         cx, cz, ang, z0 + s.y0 + s.length / 2);
     }
 
-    // Перемычка на ребре: высота SD, поперёк стены 2 × SW
     for (const h of layout.headers) {
       const cx = w.x1 + dirx * (h.offset + h.width / 2);
       const cz = w.y1 + diry * (h.offset + h.width / 2);
@@ -280,7 +307,6 @@ class Viewer3D {
         cx, cz, ang, z0 + h.bottomZ + h.height / 2);
     }
 
-    // Подоконная доска плашмя
     for (const sl of (layout.sills || [])) {
       const cx = w.x1 + dirx * (sl.offset + sl.width / 2);
       const cz = w.y1 + diry * (sl.offset + sl.width / 2);
@@ -288,29 +314,46 @@ class Viewer3D {
         cx, cz, ang, z0 + (sl.z0 + sl.z1) / 2);
     }
 
-    // Стёкла проёмов — полупрозрачные
+    for (const br of (layout.braces || [])) {
+      const brT = br.section.w;
+      const holder = new THREE.Group();
+      holder.position.set(
+        w.x1 + dirx * br.x0, z0, w.y1 + diry * br.x0);
+      holder.rotation.y = ang;
+      const beam = this._braceBeam(parent, br, brT,
+        (SD - brT) / 2 - 0.5, C.brace);
+      holder.add(beam);
+      parent.add(holder);
+    }
+
     for (const op of w.openings) {
       const cx = w.x1 + dirx * (op.offset + op.width / 2);
       const cz = w.y1 + diry * (op.offset + op.width / 2);
       this._place(this._box(parent, op.width, op.height, SD, C.glass, 0.35),
         cx, cz, ang, z0 + op.sill + op.height / 2);
     }
-    return layout.studs.length;
+    return {
+      studs: layout.studs.length,
+      braces: (layout.braces || []).length
+    };
   }
 
   buildFromModel(project, spacing, selectedIds) {
     this.clear();
     spacing = spacing || 600;
     const sel = selectedIds || new Set();
-    let studsTotal = 0;
+    let studsTotal = 0, bracesTotal = 0;
     for (const story of project.stories) {
       for (const w of story.walls) {
         const layout = layoutStuds(w, spacing);
-        studsTotal += this._placeWall(w, layout, story.elevation,
+        const z0 = story.elevation + (w.elevation || 0);
+        const placed = this._placeWall(w, layout, z0,
           this._colors(sel.has(w.id)), this.root);
+        studsTotal += placed.studs;
+        bracesTotal += placed.braces;
       }
     }
     this._updateCamera();
-    return { studsTotal };
+    return { studsTotal, bracesTotal };
   }
 }

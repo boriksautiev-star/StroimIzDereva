@@ -1,10 +1,11 @@
 'use strict';
 
 // ============================================================
-// core/model.js — модель дома. Только данные и логика,
-// никакой графики. Схема сохранения: SCHEMA_VERSION = 1.
+// core/model.js — модель дома. Только данные и логика.
 // section: w — ширина лицевой стороны доски (шаг стоек),
 //          h — глубина доски = толщина стены.
+// wall.elevation — вертикальный сдвиг стены относительно
+// отметки этажа, мм (для стен на разной высоте).
 // ============================================================
 
 const SCHEMA_VERSION = 1;
@@ -25,7 +26,7 @@ class Opening {
     this.width = width;      // мм
     this.height = height;    // мм
     this.sill = sill;        // подоконник, мм от низа стены
-    this.materialId = null;  // заполнение — ссылка на материал
+    this.materialId = null;
   }
 }
 
@@ -33,11 +34,12 @@ class Opening {
 class Wall {
   constructor(x1, y1, x2, y2, height = 2800, section = { w: 38, h: 140 }) {
     this.id = null;
-    this.x1 = x1; this.y1 = y1;   // мм, начало
-    this.x2 = x2; this.y2 = y2;   // мм, конец
-    this.height = height;          // мм
-    this.section = { w: section.w, h: section.h }; // доска каркаса
-    this.thickness = this.section.h; // толщина стены = глубина доски
+    this.x1 = x1; this.y1 = y1;
+    this.x2 = x2; this.y2 = y2;
+    this.height = height;
+    this.section = { w: section.w, h: section.h };
+    this.thickness = this.section.h;
+    this.elevation = 0;      // вертикальный сдвиг от отметки этажа
     this.openings = [];
     this.materialId = null;
     this.skinOutId = null;
@@ -125,8 +127,9 @@ class Project {
     p.stories = json.stories || [];
     for (const s of p.stories)
       for (const w of (s.walls || [])) {
-        if (!w.section) { w.section = { w: 38, h: 140 }; }
+        if (!w.section) w.section = { w: 38, h: 140 };
         w.thickness = w.section.h;
+        if (typeof w.elevation !== 'number') w.elevation = 0;
       }
     p.roof = json.roof || null;
     p.materials = json.materials || [];
